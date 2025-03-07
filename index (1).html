@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>6×6 Tic-Tac-Toe (First to 3 Wins!)</title>
+  <style>
+    /* Global box-sizing to prevent layout shifts */
+    * { box-sizing: border-box; }
+    body {
+      background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    h1,h3 .status { text-align: center; }
+    h1 {
+      font-size: clamp(1.5rem, 5vw, 3rem);
+      color: #0277bd;
+      margin-bottom: 15px;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    .status {
+      font-size: clamp(1rem, 3.5vw, 1.8rem);
+      color: #424242;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+    .board-container {
+      width: min(85vw, 85vh);
+      height: min(85vw, 85vh);
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      width: 100%;
+      height: 100%;
+      gap: 4px;
+      background-color: #b0bec5;
+      padding: 8px;
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+    .cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: min(5vw, 5vh);
+      font-weight: bold;
+      color: #212121;
+      background-color: #eceff1;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.2s, background-color 0.2s;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .cell:hover:not(.taken) {
+      background-color: #b3e5fc;
+      transform: scale(1.05);
+    }
+    .cell.taken { cursor: not-allowed; }
+    .x { color: #0288d1; animation: fadeIn 0.3s ease-in; }
+    .o { color: #d81b60; animation: fadeIn 0.3s ease-in; }
+    .hash { color: #388e3c; animation: fadeIn 0.3s ease-in; }
+    .a { color: #8e24aa; animation: fadeIn 0.3s ease-in; }
+    .winner {
+      background-color: #fff9c4;
+      box-shadow: 0 0 15px #ffeb3b;
+      animation: pulse 1s infinite;
+    }
+    #restart {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: clamp(1rem, 3.5vw, 1.8rem);
+      background: linear-gradient(45deg, #4caf50, #81c784);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s, background 0.2s;
+    }
+    #restart:hover {
+      background: linear-gradient(45deg, #388e3c, #66bb6a);
+      transform: translateY(-3px);
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    @media (max-width: 400px) {
+      .board-container { width: min(95vw, 95vh); height: min(95vw, 95vh); }
+      .cell { font-size: min(6vw, 6vh); }
+    }
+  </style>
+</head>
+<body>
+  <h1>6×6 4P Tic-Tac-Toe (First to 3 Wins!)</h1>
+  <h3>Made by E5</h3>
+  <div class="status" id="status">Your Turn (X)</div>
+  <div class="board-container">
+    <div class="board" id="board"></div>
+  </div>
+  <button id="restart">Restart Game</button>
+
+  <script>
+    const SIZE = 6;
+    // Define players in order: Human (X), AI 1 (O), AI 2 (#), AI 3 (A)
+    const players = ["X", "O", "#", "A"];
+    const board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(''));
+    const boardElement = document.getElementById('board');
+    const statusElement = document.getElementById('status');
+    let currentPlayer = "X";
+    let gameOver = false;
+    let winningTriples = [];
+    let moveHistory = [];
+
+    //
+    // Pre-calculate all possible winning triples (3 in a row)
+    function computeWinningTriples() {
+      winningTriples = [];
+      // Horizontal triples
+      for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j <= SIZE - 3; j++) {
+          winningTriples.push([[i, j], [i, j + 1], [i, j + 2]]);
+        }
+      }
+      // Vertical triples
+      for (let j = 0; j < SIZE; j++) {
+        for (let i = 0; i <= SIZE - 3; i++) {
+          winningTriples.push([[i, j], [i + 1, j], [i + 2, j]]);
+        }
+      }
+      // Diagonal (top-left to bottom-right)
+      for (let i = 0; i <= SIZE - 3; i++) {
+        for (let j = 0; j <= SIZE - 3; j++) {
+          winningTriples.push([[i, j], [i + 1, j + 1], [i + 2, j + 2]]);
+        }
+      }
+      // Diagonal (top-right to bottom-left)
+      for (let i = 0; i <= SIZE - 3; i++) {
+        for (let j = 2; j < SIZE; j++) {
+          winningTriples.push([[i, j], [i + 1, j - 1], [i + 2, j - 2]]);
+        }
+      }
+    }
+    computeWinningTriples();
+
+    function createBoard() {
+      boardElement.innerHTML = '';
+      for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j < SIZE; j++) {
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          cell.dataset.row = i;
+          cell.dataset.col = j;
+          cell.addEventListener('click', handleMove);
+          boardElement.appendChild(cell);
+        }
+      }
+    }
+
+    // Cycle through players in order
+    function getNextPlayer(current) {
+      const idx = players.indexOf(current);
+      return players[(idx + 1) % players.length];
+    }
+
+    // Update status text based on whose turn it is.
+    function updateStatus(player) {
+      if (player === "X")
+        statusElement.textContent = "Your Turn (X) - " + getDynamicHumanTaunt();
+      else if (player === "O")
+        statusElement.textContent = "AI 1's Turn (O)";
+      else if (player === "#")
+        statusElement.textContent = "AI 2's Turn (#)";
+      else if (player === "A")
+        statusElement.textContent = "AI 3's Turn (A)";
+    }
+  
+      
+      // Dynamic taunt generators based on game progress
+
+function getDynamicHumanTaunt() {
+  const moves = moveHistory.length;
+  let messages = [];
+  if (moves === 0) {
+    messages = [
+      "Let's see if you can make a move worth noticing.",
+      "First move. try not to embarrass yourself!",
+      "Show me something remotely decent on your first move.",
+      "Your opening move could use some work, if that's even possible.",
+      "I hope your first move isn't as weak as your excuses.",
+      "Is that your best opening move? Doubt it.",
+      "Don't worry, even a novice has better starts.",
+      "Your first move screams 'I need training!'",
+      "I expected more from someone daring enough to play.",
+      "That move? I've seen better moves from a rock.",
+      "Your opening move is already disappointing.",
+      "Starting off with that move? Bold, but flawed.",
+      "That opening move. pathetic yet expected.",
+      "If that’s your best start, we’re in trouble.",
+      "Not a promising beginning, is it?",
+      "Your opening move is as awkward as your smile.",
+      "A weak start like that sets the tone, doesn't it?",
+      "That move is a disaster waiting to happen.",
+      "I hope your subsequent moves can redeem that flop.",
+      "Clearly, you don't know how to start strong.",
+      "Your opening is as bland as unsalted porridge.",
+      "I expected fireworks, but all I got was a fizzle.",
+      "That first move is as inspiring as a damp squib.",
+      "Not exactly a move to write home about.",
+      "Your debut is underwhelming, to say the least.",
+      "Are you even trying? That start is pitiful.",
+      "Your opening move is a masterclass in mediocrity.",
+      "I’ve seen more promising moves in a toddler’s scribbles.",
+      "That move screams 'I’m clueless!'",
+      "Your first move sets the bar disappointingly low."
+    ];
+  } else if (moves < 6) {
+    messages = [
+      "Your moves are as bland as a stale sandwich.",
+      "Not exactly the beginning of a champion's play.",
+      "You're off to a mediocre start, keep trying.",
+      "That move was weak. I expected more brilliance.",
+      "Your strategy is as shallow as a puddle.",
+      "I'm not impressed by your half-hearted attempts.",
+      "Your play is as uninspired as a Monday morning.",
+      "I see you're struggling. poor move.",
+      "Is that the best you can do?",
+      "Your tactics are laughable, in a sad way.",
+      "Keep it up. being mid seems to be your specialty.",
+      "That move was so weak it almost made me yawn.",
+      "You're not exactly setting the board on fire.",
+      "It seems you're content with average moves.",
+      "Your performance so far is a masterclass in mediocrity.",
+      "I expected you to do better than that, but alas.",
+      "Your moves lack any trace of brilliance.",
+      "Do you even know what you're doing?",
+      "You're playing like you've never seen a tic-tac-toe board before.",
+      "A mediocre move for a mediocre player.",
+      "That move is as uninspired as last week's leftovers.",
+      "You’re taking the scenic route to defeat.",
+      "Your move is as forgettable as yesterday’s news.",
+      "It’s almost as if you don’t care at all.",
+      "Your strategy is evaporating before my eyes.",
+      "That move is painfully average.",
+      "Even a snail would outpace that play.",
+      "Your game plan appears to be missing entirely.",
+      "A move so bland it barely registers.",
+      "I expected a spark. what I got was a flicker.",
+      "Your move just confirmed your mediocrity."
+    ];
+  } else if (moves < 12) {
+    messages = [
+      "After all these moves, you're still hopeless.",
+      "I expected you to be eliminated by now.",
+      "Your game is dragging on, and it's painful to watch.",
+      "You're just stalling now, aren't you?",
+      "It’s like you’re determined to lose every time.",
+      "Your moves are as predictable as a broken clock.",
+      "I hoped for a challenge, but you're just coasting.",
+      "Your play is a testament to mediocrity.",
+      "You're dragging your own downfall with every move.",
+      "I've seen snails with faster, smarter moves.",
+      "Even after these moves, you're still a walking disaster.",
+      "Your strategy is as clear as mud.",
+      "I’m not surprised you’re still in the game. losing is your forte.",
+      "You're almost in a rut, and it's really sad.",
+      "Your play is so dull, it's almost comical.",
+      "Every move you make confirms your incompetence.",
+      "You're stuck in a loop of mediocrity.",
+      "At this rate, your defeat is a foregone conclusion.",
+      "You're not even trying hard enough to win.",
+      "Your game has become a masterclass in self-sabotage.",
+      "Your moves are a sad echo of your potential.",
+      "Every decision you make leads to inevitable failure.",
+      "Your strategy is as effective as a wet paper towel.",
+      "I see a pattern: mediocrity over and over again.",
+      "Your play is a constant reminder of your inadequacy.",
+      "You're scripting your own downfall, move by move.",
+      "It's almost impressive how consistently poor your moves are.",
+      "You must be enjoying this display of futility.",
+      "Your moves are the stuff of tragic comedy.",
+      "Even in chaos, your strategy remains pitiful.",
+      "A masterclass in how not to play."
+    ];
+  } else {
+    messages = [
+      "You must really love losing, huh?",
+      "Even the board is tired of your pathetic moves.",
+      "At this point, your moves are just embarrassing.",
+      "You're a monument to mediocrity.",
+      "Your incompetence is on full display.",
+      "After all these moves, you still haven't figured it out.",
+      "You're the definition of a hopeless case.",
+      "Every move you make is a step closer to inevitable defeat.",
+      "Even if you tried, you wouldn't win.",
+      "Your continued play is a sad spectacle.",
+      "You're clinging to hope, but it's clearly misplaced.",
+      "The longer you play, the more pathetic you become.",
+      "Your persistence is laughable in the worst possible way.",
+      "You're in deep, and it's already too late.",
+      "I wouldn't be surprised if you lost in a mirror match.",
+      "You're stuck in a cycle of failure.",
+      "Your moves are as useless as they are predictable.",
+      "After all this, you still have no clue what you're doing.",
+      "You’re not just losing; you're setting records in incompetence.",
+      "Even the game is begging you to quit.",
+      "Your play is as tragic as it is inevitable.",
+      "You continue to amaze me in all the wrong ways.",
+      "Every move is a new low in your performance.",
+      "Your tactics are a symphony of failure.",
+      "I’ve seen better moves in a lost cause.",
+      "Your persistence is only matched by your ineptitude.",
+      "A legend in the making. if mediocrity were a virtue.",
+      "Your gameplay is a masterpiece of misfortune.",
+      "You redefine the term 'inept' with every move.",
+      "Keep playing; your defeat is now an art form.",
+      "Your play is a marathon of misery.",
+      "Even in a stalemate, you manage to disappoint.",
+      "You're not even worth a second glance at this point."
+    ];
+  }
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
+function getDynamicAiWinTaunt() {
+  const moves = moveHistory.length;
+  let messages = [];
+  if (moves < 6) {
+    messages = [
+      "That win was too easy, even a snail could beat you.",
+      "Quick win! Did you even try?",
+      "I won before you even knew what hit you!",
+      "Your defeat came as fast as your first move.",
+      "Too simple. your skills are embarrassingly weak.",
+      "I barely broke a sweat winning that quickly.",
+      "That victory was as effortless as breathing.",
+      "You made it look like a complete joke.",
+      "Your loss was written in the stars from the start.",
+      "You lost faster than you could blink.",
+      "That win was a walk in the park for me.",
+      "I won so fast, it barely registered on your end.",
+      "Your performance was a masterclass in futility.",
+      "An instant win. how disappointing for you.",
+      "Victory was inevitable, given your pathetic play.",
+      "I dominated before you could even react.",
+      "You never stood a chance from the outset.",
+      "That was a quick and effortless win.",
+      "I don't even know why you bothered.",
+      "You lost almost immediately. amazing, really.",
+      "That win proved your skills are nonexistent.",
+      "I crushed you in record time.",
+      "Your loss was as swift as it was certain.",
+      "I won before you could process your own incompetence.",
+      "Your defeat was as inevitable as sunrise.",
+      "I made short work of your feeble attempts.",
+      "That win was a clear demonstration of my superiority.",
+      "You were undone in the blink of an eye.",
+      "I conquered you with hardly any effort.",
+      "Your first moves sealed your fate.",
+      "I won before you even had a chance to recover."
+    ];
+  } else if (moves < 12) {
+    messages = [
+      "I knew you'd slip up sooner or later.",
+      "Your weak moves made this an effortless win.",
+      "Victory was clear once you started messing up.",
+      "I capitalized on every mistake you made.",
+      "Your errors led straight to my win.",
+      "I outsmarted you at every turn.",
+      "Your strategy crumbled under pressure.",
+      "It was only a matter of time before I won.",
+      "I exploited your every blunder.",
+      "Your game was a series of unfortunate errors.",
+      "I played the perfect game while you faltered.",
+      "Every move you made paved the way to defeat.",
+      "I saw your moves coming from a mile away.",
+      "Your gameplay was a disaster from start to finish.",
+      "I won because you couldn't think for a second.",
+      "Your loss was inevitable given your lack of skill.",
+      "I outplayed you at every opportunity.",
+      "Your mistakes were as clear as day.",
+      "I simply outsmarted your pitiful tactics.",
+      "Your defeat was all but assured.",
+      "I dominated as your errors piled up.",
+      "Your game fell apart with every misstep.",
+      "I seized victory by exploiting your incompetence.",
+      "Your play left no room for redemption.",
+      "I turned your blunders into my triumph.",
+      "You made it easy for me to claim victory.",
+      "Every error you made was a gift for my win.",
+      "I capitalized perfectly on your shortcomings.",
+      "Your performance crumbled under my pressure.",
+      "I outclassed you move after move.",
+      "Your disarray was my pathway to victory."
+    ];
+  } else {
+    messages = [
+      "After all that, you still can't beat us. Pathetic!",
+      "Your incompetence knows no bounds!",
+      "Even after a marathon of moves, you still lose.",
+      "Your prolonged suffering only made this win sweeter.",
+      "I won because you were too busy making terrible moves.",
+      "Your endurance in losing is impressive, in a pathetic sort of way.",
+      "I trounced you so thoroughly, it's almost poetic.",
+      "Your defeat was a masterpiece of your own making.",
+      "Even after all these moves, you still had no chance.",
+      "I exploited every ounce of your incompetence.",
+      "Your strategy was as feeble as a whisper.",
+      "I won because your gameplay was an endless trainwreck.",
+      "You played like a beginner the entire time.",
+      "Your moves were laughably bad from start to finish.",
+      "I outclassed you at every single move.",
+      "Your downfall was inevitable with moves that pitiful.",
+      "After all that, you still couldn't muster a decent play.",
+      "Your performance has been nothing short of catastrophic.",
+      "I won because your strategy was nonexistent.",
+      "Your continuous mistakes ensured my victory.",
+      "I made you lose with every pathetic decision.",
+      "Your failures were a delight to exploit.",
+      "I claimed victory because you never improved.",
+      "Every move of yours was a stepping stone to your loss.",
+      "I outmaneuvered you at every opportunity, as expected.",
+      "Your defeat is a testament to your lack of skill.",
+      "I won, and your futile attempts only confirmed it.",
+      "Your loss was the natural outcome of your incompetence.",
+      "I dismantled your game with relentless precision.",
+      "Your efforts only made my win that much sweeter.",
+      "I celebrated every mistake you made on your way to defeat."
+    ];
+  }
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
+function getDynamicDrawMessage() {
+  const moves = moveHistory.length;
+  let messages = [];
+  if (moves < 6) {
+    messages = [
+      "A draw already? That was anticlimactic.",
+      "Even you managed to force a draw, surprising.",
+      "A tie. guess you managed not to lose immediately.",
+      "A draw? Seems like you have a tiny spark of competence.",
+      "I didn't expect a draw from someone like you, but here we are.",
+      "A stalemate. neither of us could be bothered.",
+      "Even in a draw, your performance is disappointingly average.",
+      "A tie? Not too shabby, considering your usual losses.",
+      "I guess sometimes even you can hold your ground.",
+      "A draw, for now. don't get too excited.",
+      "You managed a draw... maybe there's hope?",
+      "A draw: the only result where you didn't lose outright.",
+      "Miraculously, you forced a tie.",
+      "A draw? I suppose that's something.",
+      "Surprisingly, neither of us could best the other.",
+      "A tie for now—enjoy your fleeting moment of not losing.",
+      "Even a draw looks better than your usual defeats.",
+      "A draw, but your effort was still laughably minimal.",
+      "Not a win, but at least you didn't completely lose.",
+      "A tie. a brief respite from your endless failures."
+    ];
+  } else if (moves < 12) {
+    messages = [
+      "A draw! Looks like you can only manage mediocrity.",
+      "At least you managed to hold your ground. sort of.",
+      "A tie. proving you're as average as they come.",
+      "A draw, which is still a win in your dictionary, I guess.",
+      "You forced a draw; maybe there's a glimmer of hope.",
+      "A tie. your best performance so far, sadly mediocre.",
+      "Even in a draw, your efforts are underwhelming.",
+      "A draw, but don't let it fool you into thinking you're good.",
+      "A tie. a result that mirrors the average quality of your moves.",
+      "You pulled a draw out of a losing game.",
+      "A draw is all you could muster, how disappointing.",
+      "You managed a tie, though neither side cared much.",
+      "A draw: the only outcome where you don't lose spectacularly.",
+      "A tie. mirroring the consistent mediocrity of your moves.",
+      "Even a tie seems too good for your playstyle.",
+      "A draw; maybe next time you'll do slightly better.",
+      "You managed a tie, though it's hardly worth celebrating.",
+      "A draw, and yet your performance remains uninspired.",
+      "A tie is the best you could hope for, unfortunately.",
+      "A draw. a result that screams average to me."
+    ];
+  } else {
+    messages = [
+      "A draw? Your survival skills are the only thing working here.",
+      "A tie. your persistence in losing is almost admirable.",
+      "Even in a draw, you're a walking example of incompetence.",
+      "A draw, but it only highlights how consistently bad you are.",
+      "You managed a tie, yet your play remains utterly pathetic.",
+      "A draw, though it's more of a temporary pause in your failures.",
+      "A tie that only proves you're good at not winning.",
+      "Even a draw is a bitter pill when you're as hopeless as you are.",
+      "A tie. your only success in this game is mediocrity.",
+      "A draw, which is the best you can hope for given your lack of skill.",
+      "You forced a tie, but it doesn't change the fact you're terrible.",
+      "A tie; a result as bland as your entire strategy.",
+      "A draw only reinforces your consistent inability to win.",
+      "Even a tie is a rare feat for someone as dismal as you.",
+      "A draw one of the few things you manage without complete failure.",
+      "A tie; it's almost impressive how consistently average you are.",
+      "You achieved a draw, yet your overall performance is still laughable.",
+      "A tie only serves as a reminder of your ongoing mediocrity.",
+      "A draw, and yet you couldn't muster a win to save your life.",
+      "A tie. your game is as uninspired as it is predictable.",
+      "A draw, and still you manage to be utterly forgettable.",
+      "A tie that highlights your inability to clinch a win.",
+      "A draw, which is more a testament to your mediocrity than skill.",
+      "A tie? Even this outcome is beneath your potential, sadly.",
+      "A draw. the only non-disaster in your game so far.",
+      "A tie, proving that even your best is still terrible.",
+      "A draw; your game is as stagnant as it is pathetic.",
+      "A tie. it's almost as if neither side cared to try.",
+      "A draw, yet your efforts remain an endless disappointment.",
+      "A tie; the best you can do is not lose entirely.",
+      "A draw, but it only underlines your perpetual mediocrity."
+    ];
+  }
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+  
+    // Human move handler (only active when it's "X")
+    function handleMove(event) {
+      if (gameOver || currentPlayer !== "X") return;
+      const row = parseInt(event.target.dataset.row);
+      const col = parseInt(event.target.dataset.col);
+      if (board[row][col] !== '') return;
+      makeMove(row, col, "X");
+      moveHistory.push({ player: "X", row, col });
+      const winnerTriple = checkWinner("X");
+      if (winnerTriple) {
+        highlightWinner(winnerTriple);
+        statusElement.textContent = "You Win! 🎉 (A miracle, I guess...)";
+        gameOver = true;
+        return;
+      }
+      if (checkDraw()) {
+        statusElement.textContent = "It's a Draw! 🤝 (" + getDynamicDrawMessage() + ")";
+        gameOver = true;
+        return;
+      }
+      // Advance to next player (AI 1)
+      currentPlayer = getNextPlayer("X");
+      updateStatus(currentPlayer);
+      setTimeout(() => aiMove(currentPlayer), 500);
+    }
+
+    // Mark the board and update the cell display
+    function makeMove(row, col, symbol) {
+      board[row][col] = symbol;
+      const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+      cell.textContent = symbol;
+      if (symbol === 'X') cell.classList.add('x');
+      else if (symbol === 'O') cell.classList.add('o');
+      else if (symbol === '#') cell.classList.add('hash');
+      else if (symbol === 'A') cell.classList.add('a');
+      cell.classList.add('taken');
+    }
+
+    // AI move for any non-human turn
+    function aiMove(symbol) {
+      if (gameOver) return;
+      setTimeout(() => {
+        // Try immediate win
+        let move = findWinningMove(symbol);
+        if (move) {
+          const [row, col] = move;
+          makeMove(row, col, symbol);
+          moveHistory.push({ player: symbol, row, col });
+          const winnerTriple = checkWinner(symbol);
+          highlightWinner(winnerTriple);
+          const winText = (symbol === "O") ? "AI 1 Wins! 🤖" :
+                          (symbol === "#") ? "AI 2 Wins! 🤖" :
+                          (symbol === "A") ? "AI 3 Wins! 🤖" : "";
+          statusElement.textContent = winText + " (" + getDynamicAiWinTaunt() + ")";
+          gameOver = true;
+          return;
+        }
+        // Try to block any opponent's winning move
+        for (const opponent of players.filter(s => s !== symbol)) {
+          let blockMove = findWinningMove(opponent);
+          if (blockMove) {
+            const [row, col] = blockMove;
+            makeMove(row, col, symbol);
+            moveHistory.push({ player: symbol, row, col });
+            if (checkDraw()) {
+              statusElement.textContent = "It's a Draw! 🤝 (" + getDynamicDrawMessage() + ")";
+              gameOver = true;
+              return;
+            }
+            currentPlayer = getNextPlayer(symbol);
+            updateStatus(currentPlayer);
+            if (currentPlayer !== "X" && !gameOver)
+              setTimeout(() => aiMove(currentPlayer), 500);
+            return;
+          }
+        }
+        // Try to find a fork opportunity (or block one)
+        let forkMove = findForkOpportunity(symbol);
+        if (!forkMove) {
+          for (const opponent of players.filter(s => s !== symbol)) {
+            const blockFork = findForkOpportunity(opponent);
+            if (blockFork) {
+              forkMove = blockFork;
+              break;
+            }
+          }
+        }
+        // If none found, use best move (via maxn)
+        if (!forkMove) {
+          forkMove = findBestMove(symbol);
+        }
+        if (forkMove) {
+          const [row, col] = forkMove;
+          makeMove(row, col, symbol);
+          moveHistory.push({ player: symbol, row, col });
+          const winnerTriple = checkWinner(symbol);
+          if (winnerTriple) {
+            highlightWinner(winnerTriple);
+            const winText = (symbol === "O") ? "AI 1 Wins! 🤖" :
+                            (symbol === "#") ? "AI 2 Wins! 🤖" :
+                            (symbol === "A") ? "AI 3 Wins! 🤖" : "";
+            statusElement.textContent = winText + " (" + getDynamicAiWinTaunt() + ")";
+            gameOver = true;
+            return;
+          }
+          if (checkDraw()) {
+            statusElement.textContent = "It's a Draw! 🤝 (" + getDynamicDrawMessage() + ")";
+            gameOver = true;
+            return;
+          }
+          currentPlayer = getNextPlayer(symbol);
+          updateStatus(currentPlayer);
+          if (currentPlayer !== "X" && !gameOver)
+            setTimeout(() => aiMove(currentPlayer), 500);
+        }
+      }, 100);
+    }
+
+    // Return a winning move if found (two in a row with one empty)
+    function findWinningMove(symbol) {
+      for (const triple of winningTriples) {
+        const symbolCount = triple.filter(([i, j]) => board[i][j] === symbol).length;
+        const emptyCount = triple.filter(([i, j]) => board[i][j] === '').length;
+        if (symbolCount === 2 && emptyCount === 1) {
+          const [i, j] = triple.find(([i, j]) => board[i][j] === '');
+          return [i, j];
+        }
+      }
+      return null;
+    }
+
+    // Check if placing a mark creates two winning opportunities (fork)
+    function findForkOpportunity(symbol) {
+      const emptyCells = getEmptyCells(board);
+      for (const [r, c] of emptyCells) {
+        board[r][c] = symbol;
+        let winningOpportunities = 0;
+        for (const triple of winningTriples) {
+          const symbolCount = triple.filter(([i, j]) => board[i][j] === symbol).length;
+          const emptyCount = triple.filter(([i, j]) => board[i][j] === '').length;
+          if (symbolCount === 2 && emptyCount === 1) {
+            winningOpportunities++;
+          }
+        }
+        board[r][c] = '';
+        if (winningOpportunities >= 2) {
+          return [r, c];
+        }
+      }
+      return null;
+    }
+
+    // Use maxn search (multi-player generalization of minimax) to choose best move
+    function findBestMove(symbol) {
+      const emptyCells = getEmptyCells(board);
+      if (moveHistory.length <= 1) {
+        const centerPositions = [[2,2],[2,3],[3,2],[3,3]];
+        for (const [r, c] of centerPositions) {
+          if (board[r][c] === '') return [r, c];
+        }
+        const cornerPositions = [[0,0],[0,SIZE-1],[SIZE-1,0],[SIZE-1,SIZE-1]];
+        for (const [r, c] of cornerPositions) {
+          if (board[r][c] === '') return [r, c];
+        }
+      }
+      const patternMove = findPatternMove(symbol);
+      if (patternMove) return patternMove;
+      let bestScore = -Infinity;
+      let bestMove = null;
+      let searchDepth = emptyCells.length < 10 ? emptyCells.length : 6;
+      for (const [r, c] of emptyCells) {
+        board[r][c] = symbol;
+        const util = maxn(board, searchDepth - 1, getNextPlayer(symbol));
+        board[r][c] = '';
+        if (util && util[symbol] > bestScore) {
+          bestScore = util[symbol];
+          bestMove = [r, c];
+        }
+      }
+      return bestMove;
+    }
+
+    // Get all empty cell coordinates
+    function getEmptyCells(boardState) {
+      const empty = [];
+      for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j < SIZE; j++) {
+          if (boardState[i][j] === '') empty.push([i, j]);
+        }
+      }
+      return empty;
+    }
+
+    // maxn algorithm – returns a utility vector for all players
+    function maxn(boardState, depth, currentPlayer) {
+      for (let p of players) {
+        if (checkWinner(p)) {
+          const util = {};
+          for (let q of players) {
+            util[q] = (q === p) ? 1000 + depth : -1000 - depth;
+          }
+          return util;
+        }
+      }
+      if (depth === 0 || checkDraw()) return heuristic(boardState);
+      const emptyCells = getEmptyCells(boardState);
+      let bestUtil = null;
+      for (let [r, c] of emptyCells) {
+        boardState[r][c] = currentPlayer;
+        const nextPlayer = getNextPlayer(currentPlayer);
+        const util = maxn(boardState, depth - 1, nextPlayer);
+        boardState[r][c] = '';
+        if (bestUtil === null || util[currentPlayer] > bestUtil[currentPlayer]) {
+          bestUtil = util;
+        }
+      }
+      return bestUtil;
+    }
+
+    // A simple heuristic scoring by counting near-complete triples
+    function heuristic(boardState) {
+      const scores = { "X": 0, "O": 0, "#": 0, "A": 0 };
+      for (const triple of winningTriples) {
+        const counts = { "X": 0, "O": 0, "#": 0, "A": 0 };
+        for (const [i, j] of triple) {
+          if (boardState[i][j] !== '') counts[boardState[i][j]]++;
+        }
+        const playersPresent = Object.keys(counts).filter(p => counts[p] > 0);
+        if (playersPresent.length === 1) {
+          const p = playersPresent[0];
+          if (counts[p] === 2) scores[p] += 50;
+          else if (counts[p] === 1) scores[p] += 10;
+        }
+      }
+      return scores;
+    }
+
+    // Fallback: if a triple has one mark and two empties, choose one empty cell
+    function findPatternMove(symbol) {
+      const emptyCells = getEmptyCells(board);
+      for (const triple of winningTriples) {
+        const symbolCount = triple.filter(([i, j]) => board[i][j] === symbol).length;
+        const emptyCount = triple.filter(([i, j]) => board[i][j] === '').length;
+        if (symbolCount === 1 && emptyCount === 2) {
+          const emptySpots = triple.filter(([i, j]) => board[i][j] === '');
+          return emptySpots[0];
+        }
+      }
+      return emptyCells.length > 0 ? emptyCells[Math.floor(Math.random() * emptyCells.length)] : null;
+    }
+
+    // Check if a player has achieved a winning triple
+    function checkWinner(symbol) {
+      for (const triple of winningTriples) {
+        if (triple.every(([i, j]) => board[i][j] === symbol)) {
+          return triple;
+        }
+      }
+      return null;
+    }
+
+    // Check if board is full
+    function checkDraw() {
+      return board.every(row => row.every(cell => cell !== ''));
+    }
+
+    function highlightWinner(triple) {
+      triple.forEach(([row, col]) => {
+        const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+        cell.classList.add('winner');
+      });
+    }
+
+    function restartGame() {
+      board.forEach(row => row.fill(''));
+      moveHistory = [];
+      gameOver = false;
+      currentPlayer = "X";
+      statusElement.textContent = "Your Turn (X)";
+      createBoard();
+    }
+
+    document.getElementById('restart').addEventListener('click', restartGame);
+    createBoard();
+  </script>
+</body>
+</html>
